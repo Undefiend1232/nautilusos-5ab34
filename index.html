@@ -15,8 +15,8 @@
         rel="stylesheet">
     <script src="/uv/uv.bundle.js"></script>
     <script src="/uv/uv.config.js"></script>
-    <script src="/uv/uv.sw.js"></script>
     <script src="/baremux/index.js"></script>
+    <script src="/js/proxy.js"></script>
     <script src="v86/cache-detector.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.15.0/dist/tf.min.js"></script>
     <link rel="stylesheet" href="/style.css">
@@ -674,39 +674,7 @@
     <script src="/js/main.js" defer></script>
 
     <script>
-        // register sw
-        if ("serviceWorker" in navigator) {
-            window.addEventListener("load", () => {
-                navigator.serviceWorker.register("/uv/sw.js")
-            })
-        }
-    </script>
-
-    <script>
-        const connection = new BareMux.BareMuxConnection("/baremux/worker.js")
-        const wispUrl = localStorage.getItem("nOS_wispUrl") || "wss://construction.services.codd70.ru/socket/"
-        const bareUrl = localStorage.getItem("nOS_bareUrl") || "https://useclassplay.vercel.app/fq/"
-
-        let searchUrl = localStorage.getItem("nOS_searchEngine") || "https://search.brave.com/search?q="
-
-        document.getElementById("browserUrlInput").addEventListener("keydown", (e) => {
-            if (e.key === "Enter") {
-                let url = document.getElementById("browserUrlInput").value
-
-                if (!url.includes(".")) {
-                    // search
-                    url = searchUrl + encodeURIComponent(url)
-                } else {
-                    if (!url.startsWith("http://") && !url.startsWith("https://")) {
-                        // add https
-                        url = "https://" + url
-                    }
-                }
-
-                transport()
-                loadBrowserPage(__uv$config.prefix + __uv$config.encodeUrl(url))
-            }
-        })
+        NautilusProxy.ready().catch(() => {})
     </script>
 </body>
 

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starting proxy...</title>
+    <script src="/uv/uv.bundle.js"></script>
+    <script src="/uv/uv.config.js"></script>
+    <script src="/baremux/index.js"></script>
+    <script src="/js/proxy.js"></script>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+            color: rgba(255, 255, 255, 0.7);
+            font-family: system-ui, sans-serif;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Served for /uv/service/* when the Ultraviolet service worker isn't controlling the page yet -->
+    <p id="status">Starting proxy...</p>
+    <script>
+        const status = document.getElementById("status")
+        // Only count reloads from the last few seconds so an old attempt doesn't block a fresh one
+        const last = JSON.parse(sessionStorage.getItem("nOS_uvBootstrap") || "{}")
+        const attempts = Date.now() - (last.time || 0) < 10000 ? last.count || 0 : 0
+
+        if (attempts >= 2) {
+            sessionStorage.removeItem("nOS_uvBootstrap")
+            status.textContent = "The proxy couldn't start in this browser. Make sure service workers are allowed and try again."
+        } else {
+            NautilusProxy.ready().then(() => {
+                sessionStorage.setItem("nOS_uvBootstrap", JSON.stringify({ count: attempts + 1, time: Date.now() }))
+                location.reload()
+            }).catch(() => {
+                status.textContent = "The proxy failed to start. Check the Wisp server in Settings > Network."
+            })
+        }
+    </script>
+</body>
+
+</html>

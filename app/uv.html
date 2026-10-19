@@ -8,6 +8,7 @@
     <script src="/uv/uv.bundle.js"></script>
     <script src="/uv/uv.config.js"></script>
     <script src="/baremux/index.js"></script>
+    <script src="/js/proxy.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/7.0.1/css/all.min.css" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -319,24 +320,16 @@
     </script>
 
     <script>
-        // register sw
-        if ("serviceWorker" in navigator) {
-            window.addEventListener("load", () => {
-                navigator.serviceWorker.register("/uv/sw.js")
-            })
-        }
+        NautilusProxy.ready().catch(() => {
+            const bg = document.querySelector(".backgroundtext p")
+            if (bg) bg.textContent = "Proxy failed to start. Check the Wisp server in Settings > Network."
+        })
     </script>
 
     <script>
         let tabFrame
 
         // actual uv handling
-        const connection = new BareMux.BareMuxConnection("/baremux/worker.js")
-        const wispUrl = "wss://construction.services.codd70.ru/socket/" // rhw wisp, super speedy
-        const bareUrl = "https://useclassplay.vercel.app/fq/" // old site i have
-
-        connection.setTransport("/libcurl/index.mjs", [{ websocket: wispUrl }])
-
         const tabCont = document.querySelector(".tabs")
 
         let bTabs = [
@@ -471,7 +464,7 @@
             cTab.historyIndex++
 
             cTab.url = url
-            const fUrl = __uv$config.prefix + __uv$config.encodeUrl(url)
+            const fUrl = NautilusProxy.encode(url)
 
             const loadC = document.querySelector(".backgroundtext")
             if (loadC) {
@@ -483,14 +476,12 @@
                 `
             }
 
-            go(fUrl)
+            NautilusProxy.ready().then(() => go(fUrl)).catch(() => {
+                if (loadC) loadC.innerHTML = `<p>Proxy failed to start. Check the Wisp server in Settings &gt; Network.</p>`
+            })
         }
 
         async function go(u) {
-
-            if (!await connection.getTransport()) {
-                connection.setTransport("/libcurl/index.mjs", [{ websocket: wispUrl }])
-            }
 
             console.log("a")
             const cTab = bTabs.find((t) => t.id === aTab)
