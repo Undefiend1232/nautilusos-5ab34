@@ -4459,7 +4459,7 @@ alt="favicon">
                                     class="searchEngineI" 
                                     style="margin-left: 0; width: 100%;" 
                                     id="wispUrlInput" 
-                                    value="${localStorage.getItem('nOS_wispUrl') || 'wss://wisp.rhw.one/'}"
+                                    value="${NautilusProxy.getWispUrl()}"
                                     placeholder="wss://..."
                                     onchange="changeWispUrl(this.value)">
                                 <button class="settings-action-btn" onclick="resetWispUrl()" style="padding: 0 1rem; margin-left: 0.5rem;">
@@ -8389,13 +8389,6 @@ function handleBrowserLandingInput(event) {
   }
 }
 
-async function transport() {
-  if (!await connection.getTransport()) {
-    connection.setTransport("/libcurl/index.mjs", [{ websocket: wispUrl }])
-  }
-}
-
-transport()
 
 function navigateBrowser(input) {
   if (!input.trim()) return;
@@ -8444,145 +8437,48 @@ async function loadBrowserPage(url) {
   const loading = document.getElementById("browserLoading");
   if (loading) loading.classList.add("active");
 
-  try {
-    viewEl.innerHTML = "";
-
-    const proxiedUrl =
-      "https://api.codetabs.com/v1/proxy/?quest=" + encodeURIComponent(url);
-    const response = await fetch(proxiedUrl);
-    if (!response.ok) throw new Error("Failed to load page");
-    const rawHtml = await response.text();
-    const urlObj = new URL(url);
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(rawHtml, "text/html");
-    if (!doc || !doc.documentElement) {
-      throw new Error("Failed to parse page");
-    }
-    if (doc && doc.head) {
-      const baseEl = doc.createElement("base");
-      let baseHref = urlObj.origin + urlObj.pathname.replace(/[^/]*$/, "");
-      if (!baseHref.endsWith("/")) {
-        baseHref += "/";
-      }
-      baseEl.setAttribute("href", baseHref);
-      doc.head.prepend(baseEl);
-    }
-    viewEl.innerHTML = doc.documentElement.innerHTML;
-    const links = viewEl.querySelectorAll("a[target]");
-    links.forEach((link) => link.removeAttribute("target"));
-    const forms = viewEl.querySelectorAll("form[target]");
-    forms.forEach((form) => form.removeAttribute("target"));
-    const scripts = Array.from(viewEl.querySelectorAll("script"));
-    for (const script of scripts) {
-      const replacement = document.createElement("script");
-      for (const attr of script.attributes) {
-        replacement.setAttribute(attr.name, attr.value);
-      }
-      replacement.textContent = script.textContent;
-      script.replaceWith(replacement);
-    }
-    const title = new URL(url).hostname;
+  const setTabTitle = (title) => {
     currentTab.title = title;
     const tabEl = document.querySelector(
-      `.browser-tab[data-tab-id="${activeBrowserTab}"]`
+      `.browser-tab[data-tab-id="${currentTab.id}"]`
     );
     if (tabEl) {
       const titleEl = tabEl.querySelector(".browser-tab-title");
-      if (titleEl) titleEl.textContent = currentTab.title;
+      if (titleEl) titleEl.textContent = title;
     }
-    viewEl.scrollTop = 0;
-    viewEl.onclick = (event) => {
-      const link = event.target.closest("a[href]");
-      if (!link) return;
-      const href = link.getAttribute("href");
-      if (!href || href.startsWith("javascript:")) return;
-      event.preventDefault();
-      let targetUrl;
+  };
+
+  try {
+    await NautilusProxy.ready();
+
+    let iframe = viewEl.querySelector("iframe.browser-iframe");
+    if (!iframe) {
+      viewEl.innerHTML = "";
+      iframe = document.createElement("iframe");
+      iframe.className = "browser-iframe";
+      viewEl.appendChild(iframe);
+    }
+
+    setTabTitle(new URL(url).hostname);
+    iframe.onload = () => {
+      if (loading) loading.classList.remove("active");
       try {
-        targetUrl = new URL(href, url).toString();
-      } catch (_) {
-        return;
-      }
-      navigateBrowser(targetUrl);
+        const title = iframe.contentDocument && iframe.contentDocument.title;
+        if (title) setTabTitle(title);
+      } catch (_) {}
     };
-    viewEl.addEventListener(
-      "submit",
-      (event) => {
-        const form = event.target;
-        if (!(form instanceof HTMLFormElement)) {
-          return;
-        }
-        const method = (form.getAttribute("method") || "GET").toUpperCase();
-        if (method !== "GET") {
-          return;
-        }
-        event.preventDefault();
-        let action = form.getAttribute("action") || url;
-        let targetUrl;
-        try {
-          targetUrl = new URL(action, url);
-        } catch (_) {
-          return;
-        }
-        const formData = new FormData(form);
-        const params = new URLSearchParams();
-        for (const [key, value] of formData.entries()) {
-          if (typeof value === "string") {
-            params.append(key, value);
-          }
-        }
-        const queryString = params.toString();
-        if (queryString) {
-          targetUrl.search = queryString;
-        }
-        navigateBrowser(targetUrl.toString());
-      },
-      true
-    );
+    iframe.src = NautilusProxy.encode(url);
     updateBrowserNavButtons();
-
-    setTimeout(() => {
-      iframe.src = url
-      iframe.onload = () => {
-        try {
-          const iframeDoc =
-            iframe.contentDocument || iframe.contentWindow.document;
-          const title = iframeDoc.title || new URL(url).hostname;
-          currentTab.title = title;
-
-          const tabEl = document.querySelector(
-            `.browser-tab[data-tab-id="${activeBrowserTab}"]`
-          );
-          if (tabEl) {
-            const titleEl = tabEl.querySelector(".browser-tab-title");
-            if (titleEl) titleEl.textContent = title;
-          }
-        } catch (err) {
-          const title = new URL(url).hostname;
-          currentTab.title = title;
-
-          const tabEl = document.querySelector(
-            `.browser-tab[data-tab-id="${activeBrowserTab}"]`
-          );
-          if (tabEl) {
-            const titleEl = tabEl.querySelector(".browser-tab-title");
-            if (titleEl) titleEl.textContent = title;
-          }
-        }
-      }
-    }, 500);
   } catch (error) {
     console.error("Browser error:", error);
+    if (loading) loading.classList.remove("active");
     viewEl.innerHTML = `
                   <div class="browser-error">
                       <i class="fas fa-exclamation-triangle browser-error-icon"></i>
                       <h2 class="browser-error-title">Unable to Load Page</h2>
-                      <p class="browser-error-message">The page could not be loaded. Some websites prevent embedding for security reasons. Try visiting the site directly.</p>
-                      <button class="browser-error-btn" onclick="window.open('${url}', '_blank')">Open in New Tab</button>
+                      <p class="browser-error-message">The proxy could not start. Check the Wisp server in Settings &gt; Network and try again.</p>
                   </div>
               `;
-  } finally {
-    if (loading) loading.classList.remove("active");
   }
 }
 function browserGoBack() {
@@ -17397,7 +17293,7 @@ function executeTool_ChangeSetting(params) {
 
     // Wisp URL setting
     if (setting === 'wispUrl' || setting === 'wisp_url') {
-      localStorage.setItem('nOS_wispUrl', value);
+      NautilusProxy.setWispUrl(value);
       return {
         success: true,
         message: `✅ Changed Wisp URL to: ${value}`,
@@ -17537,7 +17433,7 @@ function executeTool_GetAvailableOptions(params) {
       },
       urls: {
         wispUrl: {
-          current: localStorage.getItem('nOS_wispUrl') || 'wss://wisp.rhw.one/',
+          current: NautilusProxy.getWispUrl(),
           description: 'Wisp proxy URL for browser'
         },
         bareUrl: {
@@ -17812,13 +17708,13 @@ function selectSearchEngine(name, url) {
 }
 
 function changeWispUrl(url) {
-  localStorage.setItem('nOS_wispUrl', url);
+  NautilusProxy.setWispUrl(url.trim() || NautilusProxy.DEFAULT_WISP);
   showToast('Wisp URL updated', 'fa-check');
 }
 
 function resetWispUrl() {
-  const defaultUrl = 'wss://wisp.rhw.one/';
-  localStorage.setItem('nOS_wispUrl', defaultUrl);
+  const defaultUrl = NautilusProxy.DEFAULT_WISP;
+  NautilusProxy.setWispUrl(defaultUrl);
   const input = document.getElementById('wispUrlInput');
   if (input) input.value = defaultUrl;
   showToast('Wisp URL reset to default', 'fa-undo');

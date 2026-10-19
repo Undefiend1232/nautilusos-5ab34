@@ -1,0 +1,6 @@
+# If the Ultraviolet service worker isn't active yet, proxied URLs reach the
+# server instead; serve a page that starts the proxy and reloads.
+[[redirects]]
+  from = "/uv/service/*"
+  to = "/uv/bootstrap.html"
+  status = 200
